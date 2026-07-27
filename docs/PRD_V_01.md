@@ -139,7 +139,10 @@ This project deliberately will NOT include:
   `PAID / UNPAID`.
 - **A real front end** — only a thin, AI-built demo UI; real learning is proven via automated tests.
 - **Real email / SMS delivery** — notification delivery (SMTP) is theory only, built last if time allows.
-- **Non-functional requirements** — no performance, scalability, security-hardening, or availability targets.
+- **Non-functional requirement *targets/SLAs*** — no hard performance, scalability, or availability
+  numbers are specified (premature before the system exists). NFR *awareness* — why tools like
+  indexing, caching, and queues exist and where they touch this project — is tracked in
+  `docs/NFR-notes.md`.
 - **Heavy reporting / analytics / BI** — only the few basic read-only views in §4.7.
 - **Multi-currency, taxes, invoicing, refunds** — payment tracking stays minimal.
 - **Housekeeping / inventory** beyond a room's status field.
