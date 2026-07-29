@@ -87,15 +87,16 @@ just skipped to `run` because they'd already built and published it to Docker Hu
 
 ## The Postgres command dissected
 ```
-docker run --name pms-postgres -e POSTGRES_PASSWORD=YOURPASS -p 5433:5432 -v pms_pgdata:/var/lib/postgresql/data -d postgres:18
+docker run --name pms-postgres -e POSTGRES_PASSWORD=YOURPASS -p 5433:5432 -v pms_pgdata:/var/lib/postgresql -d postgres:18
 ```
 - `--name pms-postgres` — a friendly name for the container (else Docker assigns a random one).
 - `-e POSTGRES_PASSWORD=...` — sets an **environment variable inside the container**; the Postgres
   image reads it on first startup to set the `postgres` superuser's password. (Env vars = how you
   configure a container from the outside without editing the image.)
 - `-p 5433:5432` — **publish a port**, format `HOST:CONTAINER`. See the next section.
-- `-v pms_pgdata:/var/lib/postgresql/data` — a **named volume** holding the DB's data files, so data
-  survives even if the container is deleted.
+- `-v pms_pgdata:/var/lib/postgresql` — a **named volume** holding the DB's data files, so data
+  survives even if the container is deleted. **(Postgres 18+ requires the mount here, at
+  `/var/lib/postgresql` — NOT the old `…/data` path, which now errors on startup.)**
 - `-d` — **detached**: run in the background (a server, not a one-shot).
 - `postgres:18` — **image:tag** — `postgres` is the image name on Docker Hub, `18` is the version tag.
 
