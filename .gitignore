@@ -8,8 +8,10 @@ out/
 bin/
 
 # Maven
-.mvn/
-!.mvn/wrapper/maven-wrapper.jar
+# NOTE: .mvn/wrapper/maven-wrapper.properties IS committed on purpose — it pins the Maven
+# version so `./mvnw` gives everyone the same build. Only the downloaded jar is ignored.
+.mvn/wrapper/maven-wrapper.jar
+HELP.md
 
 # Gradle (in case we switch)
 .gradle/
@@ -35,15 +37,24 @@ Desktop.ini
 # Environment / secrets (never commit these)
 .env
 *.env
-application-local.properties
+application-*.properties
+!application-*.properties.example
 application-secret.*
 
 # Docker local volumes
 pgdata/
 
 
-# Claude
+# Claude (local-only AI working files, never pushed)
 CLAUDE.md
+INDEX.md
 
 # Local Docs
 /docs/local/*
+
+# Spring Initializr leftovers (project already extracted into the repo root)
+starter.zip
+_spring_tmp/
+
+# Java upgrade tooling scaffolding (IDE-generated, not ours)
+.github/modernize/
