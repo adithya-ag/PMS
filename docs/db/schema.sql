@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS user_pms (
 CREATE TABLE IF NOT EXISTS hotels (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name        varchar NOT NULL,
-    email       varchar NOT NULL,
-    phone       varchar NOT NULL,
+    email       varchar NOT NULL UNIQUE,
+    phone       varchar NOT NULL UNIQUE,
     city        varchar NOT NULL,
     state       varchar NOT NULL,
     pincode     varchar NOT NULL,          -- text, not int: identifiers can have leading zeros / '+'
