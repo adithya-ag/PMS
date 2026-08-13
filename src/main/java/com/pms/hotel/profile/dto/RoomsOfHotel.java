@@ -1,10 +1,13 @@
 package com.pms.hotel.profile.dto;
 
 import java.time.Instant;
+import java.util.List;
 
-public record HotelResponse(
+
+public record RoomsOfHotel(
     Long id, 
     String name, 
+    List<RoomSummary> rooms,
     String email, 
     String phone, 
     String city, 

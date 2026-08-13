@@ -54,4 +54,10 @@ public class HotelController {
         service.deleteHotel(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/{id}/get/rooms") //is that correct way of creating url?
+    public ResponseEntity<RoomsOfHotel> getHotelRooms(@PathVariable Long id){
+        return ResponseEntity.ok(service.getHotelRooms(id)); 
+    }
+
 }
