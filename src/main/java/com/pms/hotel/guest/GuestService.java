@@ -58,6 +58,9 @@ public class GuestService {
             throw new ResourceNotFoundException("Hotel", hotelId);
         }
 
+        // StringUtils.hasText() checks if a given string contains actual text by 
+        // verifying three conditions: the string is not null, its length is greater 
+        // than 0, and it contains at least one non-whitespace characte
         Page<Guest> page = StringUtils.hasText(phone)
                 ? guestRepo.findByHotelIdAndPhone(hotelId, phone, pageable)
                 : guestRepo.findByHotelId(hotelId, pageable);

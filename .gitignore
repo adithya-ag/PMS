@@ -58,3 +58,19 @@ _spring_tmp/
 
 # Java upgrade tooling scaffolding (IDE-generated, not ours)
 .github/modernize/
+# Frontend (pms-ui)
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+*.local
+*.tsbuildinfo
+.eslintcache
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env.local
+.env.*.local

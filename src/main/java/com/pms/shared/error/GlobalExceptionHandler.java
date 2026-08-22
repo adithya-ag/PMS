@@ -2,6 +2,7 @@ package com.pms.shared.error;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -61,6 +62,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(InvalidDateRangeException.class)
+    public ProblemDetail handleInvalidDateRange(InvalidDateRangeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Invalid Date Range");
+        problem.setType(URI.create("https://pms.com/errors/bad-request"));
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(BookingConflictException.class)
+    public ProblemDetail handelBookingConflict(BookingConflictException ex){
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Room Not available");
+        problem.setType(URI.create("https://pms.com/errors/not-available"));
+        problem.setProperty("timeStamp", Instant.now());
+        return problem;
+    }
+
     // B. Database Constraint Errors (Unique Email, Foreign Key, etc.)
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
@@ -68,7 +87,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         String safeMessage = "A database constraint was violated. Please check your input.";
         
         // Optional: Log the real error internally for debugging
-        // logger.error("DB Constraint Violation", ex); 
+        logger.error("DB constraint violation", ex);
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, safeMessage);
         problem.setTitle("Data Conflict");
@@ -90,7 +109,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setProperty("timestamp", Instant.now());
         
         // Log the full stack trace so you can debug it
-        // logger.error("Unexpected error", ex);
+        logger.error("Unexpected error", ex);
         
         return problem;
     }
