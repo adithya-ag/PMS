@@ -80,18 +80,85 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
-    // B. Database Constraint Errors (Unique Email, Foreign Key, etc.)
+    // B. Database Constraint Errors (Unique Email, Foreign Key, the EXCLUDE constraint, ...)
+    //
+    // Spring translates Hibernate's ConstraintViolationException into this one type, so EVERY
+    // database rule that fires arrives here: a duplicate hotel email, a bad foreign key, and
+    // the no_double_booking EXCLUDE constraint all look identical at this point.
+    //
+    // A single generic 409 for all of them is honest but unhelpful — the client is told "a
+    // constraint was violated" and cannot tell whether to change the dates, change the email,
+    // or report a bug. So we look at WHICH constraint fired and give a specific message for the
+    // handful a user can actually trigger, falling back to the generic message for the rest.
+    //
+    // Trade-off being made here: this couples Java to database identifiers. Rename a constraint
+    // in schema.sql and this silently degrades to the generic message — it won't break, it just
+    // gets less helpful. That's the accepted cost; the alternative (parsing SQLSTATEs) tells you
+    // the CATEGORY of failure but never WHICH rule, which is the part users need.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        // Safety: Don't leak raw SQL errors to the client
-        String safeMessage = "A database constraint was violated. Please check your input.";
-        
-        // Optional: Log the real error internally for debugging
+
+        // getMostSpecificCause() unwraps the chain down to the driver's own exception —
+        // the same instinct as "read the LAST Caused by:" when debugging by hand.
+        // Postgres puts the constraint name in that message, e.g.
+        //   ERROR: conflicting key value violates exclusion constraint "no_double_booking"
+        String rootMessage = ex.getMostSpecificCause().getMessage();
+        String cause = rootMessage == null ? "" : rootMessage.toLowerCase();
+
+        // Never leak raw SQL to the client — but always log it for ourselves.
         logger.error("DB constraint violation", ex);
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, safeMessage);
-        problem.setTitle("Data Conflict");
-        problem.setType(URI.create("https://pms.com/errors/data-conflict"));
+        HttpStatus status = HttpStatus.CONFLICT;
+        String title;
+        String detail;
+        String type;
+
+        if (cause.contains("no_double_booking")) {
+            // ⭐ The centrepiece rule. Reaching here means the app-level availability check and
+            // the pessimistic room lock were both bypassed or lost a race — and the DATABASE
+            // caught it anyway. That is exactly what the constraint is for.
+            title  = "Room Not available";
+            detail = "Rooms Not available for the selected dates";
+            type   = "https://pms.com/errors/not-available";
+
+        } else if (cause.contains("uq_room_per_hotel")) {
+            title  = "Duplicate Room Number";
+            detail = "A room with that number already exists in this hotel.";
+            type   = "https://pms.com/errors/duplicate";
+
+        // Two names checked per rule because schema.sql and the live databases have DRIFTED:
+        // schema.sql declares an inline `email varchar NOT NULL UNIQUE`, which Postgres would
+        // auto-name "hotels_email_key", but the running database actually has an explicitly
+        // named "unique_email". Matching both keeps this correct whichever way the drift is
+        // resolved. (Resolving it properly is a schema decision — see PROGRESS.md.)
+        } else if (cause.contains("unique_email") || cause.contains("hotels_email_key")) {
+            title  = "Duplicate Email";
+            detail = "A hotel with that email address already exists.";
+            type   = "https://pms.com/errors/duplicate";
+
+        } else if (cause.contains("unique_phone") || cause.contains("hotels_phone_key")) {
+            title  = "Duplicate Phone";
+            detail = "A hotel with that phone number already exists.";
+            type   = "https://pms.com/errors/duplicate";
+
+        } else if (cause.contains("chk_booking_dates")) {
+            // A CHECK constraint failing is a BAD REQUEST, not a conflict: nothing is competing,
+            // the input itself is invalid. Bean Validation should normally catch this first —
+            // reaching here means a validation gap worth investigating.
+            status = HttpStatus.BAD_REQUEST;
+            title  = "Invalid Date Range";
+            detail = "Check-out date must be after the check-in date.";
+            type   = "https://pms.com/errors/bad-request";
+
+        } else {
+            title  = "Data Conflict";
+            detail = "A database constraint was violated. Please check your input.";
+            type   = "https://pms.com/errors/data-conflict";
+        }
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        problem.setType(URI.create(type));
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

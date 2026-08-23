@@ -5,6 +5,14 @@
 --   * enum TYPES are created before any table that uses them (types are global; columns are local)
 
 -- ─────────────────────────────────────────────────────────────
+-- Extensions. Must exist before the constraints that depend on them.
+--   btree_gist: lets a plain '=' comparison on a scalar (bigint) participate in a GiST index.
+--   GiST natively handles "overlappy" types (ranges, geometry) but NOT scalar equality, so
+--   without this the no_double_booking EXCLUDE constraint below fails with
+--   "data type bigint has no default operator class for access method gist".
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+-- ─────────────────────────────────────────────────────────────
 -- Platform-level admins/users — the ONLY table with no hotel_id
 CREATE TABLE IF NOT EXISTS user_pms (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -126,5 +134,52 @@ CREATE INDEX idx_bookings_overlap  ON hotel_bookings (hotel_id, room_id, check_i
 CREATE INDEX idx_bookings_by_date  ON hotel_bookings (hotel_id, check_in_date);   -- "today's arrivals" report
 CREATE INDEX idx_payments_booking  ON payments (booking_id);
 
--- NOTE: the airtight "no two active bookings overlap on the same room" rule will later become a
--- Postgres EXCLUDE constraint (GiST) — the concurrency highlight — added at the booking deep-dive.
+-- ─────────────────────────────────────────────────────────────
+-- ⭐ THE NO-DOUBLE-BOOKING RULE — enforced by the DATABASE, not the application.
+--
+-- Applied 2026-08-24, after the double-booking bug was reproduced deliberately and then fixed
+-- three times over: app-level availability check → pessimistic row lock → this.
+--
+-- WHY THIS EXISTS AT ALL:
+--   The app-level check (BookingRepository.existsOverlapping) and the pessimistic lock on the
+--   room row both work, but ONLY because every code path politely agrees to use them. A bulk
+--   import, a background job, a hotfix written next year, or a manual INSERT from psql at 2am
+--   bypasses both and silently reintroduces the bug. This constraint cannot be bypassed by
+--   anyone, from any client, in any language.
+--
+-- HOW IT READS:
+--   UNIQUE says  "no two rows where these columns are EQUAL".
+--   EXCLUDE says "no two rows where these expressions are related by an OPERATOR I choose".
+--   UNIQUE is simply EXCLUDE with '=' hardcoded.
+--
+--   room_id WITH =    → same physical room
+--   daterange(...)    → the stay, as a native Postgres range type
+--     '[)'            → inclusive start, EXCLUSIVE end. This is the half-open interval that
+--                       matches the app's rule  (in < :out AND out > :in)  exactly: a guest
+--                       checking OUT on the 5th and another checking IN on the 5th do NOT
+--                       conflict — the room is free that night.
+--   WITH &&           → '&&' is the range OVERLAP operator
+--   WHERE (...)       → a PARTIAL constraint: only CONFIRMED and CHECKED_IN block a room.
+--                       PENDING deliberately does not (an abandoned booking must not hold a
+--                       room forever); CANCELLED and CHECKED_OUT block nothing.
+--
+-- ⚠️ MUST STAY IN SYNC with BookingRepository.BLOCKING_STATUSES. If one changes, change both.
+--
+-- BONUS: the GiST index backing this constraint also SPEEDS UP the availability query — the
+-- same structure that enforces the rule is the one that answers "is this room free?".
+--
+-- COST: an INSERT does an index LOOKUP against it, not a table scan — the same cost class as
+-- any UNIQUE constraint. Not a scan, and not something to be afraid of.
+ALTER TABLE hotel_bookings
+  ADD CONSTRAINT no_double_booking
+  EXCLUDE USING gist (
+      room_id WITH =,
+      daterange(check_in_date, check_out_date, '[)') WITH &&
+  )
+  WHERE (status IN ('CONFIRMED', 'CHECKED_IN'));
+
+-- NOTE on idx_bookings_overlap above: it leads with hotel_id, which the overlap query never
+-- filters on, so it cannot be seeked (measured: 25 buffers vs 2). The correct shape would be
+-- (room_id, check_in_date, check_out_date). Left as-is deliberately — at this data volume both
+-- plans are sub-millisecond, and the GiST index above now covers the same query anyway.
+-- See docs/concurrency-and-locking-notes.md → Section 9.
