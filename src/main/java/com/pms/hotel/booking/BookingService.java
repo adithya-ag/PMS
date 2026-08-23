@@ -68,7 +68,7 @@ public class BookingService {
 
             room = available.get(0);
         }
-        try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        // try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         Booking booking = mapper.toEntity(request);
         booking.setHotel(hotel);
         booking.setRoom(room);
