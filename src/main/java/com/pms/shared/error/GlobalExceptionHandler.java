@@ -80,28 +80,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
-    // B. Database Constraint Errors (Unique Email, Foreign Key, the EXCLUDE constraint, ...)
-    //
-    // Spring translates Hibernate's ConstraintViolationException into this one type, so EVERY
-    // database rule that fires arrives here: a duplicate hotel email, a bad foreign key, and
-    // the no_double_booking EXCLUDE constraint all look identical at this point.
-    //
-    // A single generic 409 for all of them is honest but unhelpful — the client is told "a
-    // constraint was violated" and cannot tell whether to change the dates, change the email,
-    // or report a bug. So we look at WHICH constraint fired and give a specific message for the
-    // handful a user can actually trigger, falling back to the generic message for the rest.
-    //
-    // Trade-off being made here: this couples Java to database identifiers. Rename a constraint
-    // in schema.sql and this silently degrades to the generic message — it won't break, it just
-    // gets less helpful. That's the accepted cost; the alternative (parsing SQLSTATEs) tells you
-    // the CATEGORY of failure but never WHICH rule, which is the part users need.
+    // 409, not 400: the request is well-formed and would have been valid at another moment —
+    // it is the booking's CURRENT STATE that refuses it. 400 means "I can't process your input".
+    @ExceptionHandler(IllegalStateTransitionException.class)
+    public ProblemDetail handleInvalidTrasition(IllegalStateTransitionException ex){
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Invalid Status Transition");
+        problem.setType(URI.create("https://pms.com/errors/invalid-transition"));
+        problem.setProperty("timeStamp", Instant.now());
+        return problem;
+    }
+
+    // B. Database Constraint Errors.
+    // EVERY database rule arrives as this ONE type, so we read the constraint NAME to tell them
+    // apart. Trade-off: couples Java to DB identifiers — rename one and this quietly falls back
+    // to the generic message.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrityViolation(DataIntegrityViolationException ex) {
 
-        // getMostSpecificCause() unwraps the chain down to the driver's own exception —
-        // the same instinct as "read the LAST Caused by:" when debugging by hand.
-        // Postgres puts the constraint name in that message, e.g.
-        //   ERROR: conflicting key value violates exclusion constraint "no_double_booking"
+        // getMostSpecificCause() = the last "Caused by:" — Postgres puts the constraint name there.
         String rootMessage = ex.getMostSpecificCause().getMessage();
         String cause = rootMessage == null ? "" : rootMessage.toLowerCase();
 
@@ -126,11 +123,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             detail = "A room with that number already exists in this hotel.";
             type   = "https://pms.com/errors/duplicate";
 
-        // Two names checked per rule because schema.sql and the live databases have DRIFTED:
-        // schema.sql declares an inline `email varchar NOT NULL UNIQUE`, which Postgres would
-        // auto-name "hotels_email_key", but the running database actually has an explicitly
-        // named "unique_email". Matching both keeps this correct whichever way the drift is
-        // resolved. (Resolving it properly is a schema decision — see PROGRESS.md.)
+        // Two names each: schema.sql says inline UNIQUE (-> "hotels_email_key") but the live DB
+        // has a named "unique_email". Known drift; ddl-auto=validate does not check constraint names.
         } else if (cause.contains("unique_email") || cause.contains("hotels_email_key")) {
             title  = "Duplicate Email";
             detail = "A hotel with that email address already exists.";
@@ -142,9 +136,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             type   = "https://pms.com/errors/duplicate";
 
         } else if (cause.contains("chk_booking_dates")) {
-            // A CHECK constraint failing is a BAD REQUEST, not a conflict: nothing is competing,
-            // the input itself is invalid. Bean Validation should normally catch this first —
-            // reaching here means a validation gap worth investigating.
+            // A CHECK failing is bad INPUT, not a conflict. Bean Validation should have caught it.
             status = HttpStatus.BAD_REQUEST;
             title  = "Invalid Date Range";
             detail = "Check-out date must be after the check-in date.";

@@ -53,11 +53,32 @@ public class BookingController {
         return ResponseEntity.ok(service.getBooking(hotelId, bookingId));
     }
 
+    // Three named action endpoints, ONE service method behind them.
+    // Named URLs (/cancel) over a generic PATCH {"status": "..."} because the URL then says what
+    // the action MEANS — and later, each can carry its own @PreAuthorize role.
+    // PATCH not PUT: these change one field, they don't replace the resource.
+
     @PatchMapping("/{bookingId}/cancel")
     public ResponseEntity<BookingResponse> cancelBooking(
-        @PathVariable Long hotelId, 
+        @PathVariable Long hotelId,
         @PathVariable Long bookingId
     ){
-        return ResponseEntity.ok(service.cancelBooking(hotelId, bookingId));
+        return ResponseEntity.ok(service.changeStatus(hotelId, bookingId, BookingStatus.CANCELLED));
+    }
+
+    @PatchMapping("/{bookingId}/check-in")
+    public ResponseEntity<BookingResponse> checkIn(
+        @PathVariable Long hotelId,
+        @PathVariable Long bookingId
+    ){
+        return ResponseEntity.ok(service.changeStatus(hotelId, bookingId, BookingStatus.CHECKED_IN));
+    }
+
+    @PatchMapping("/{bookingId}/check-out")
+    public ResponseEntity<BookingResponse> checkOut(
+        @PathVariable Long hotelId,
+        @PathVariable Long bookingId
+    ){
+        return ResponseEntity.ok(service.changeStatus(hotelId, bookingId, BookingStatus.CHECKED_OUT));
     }
 }

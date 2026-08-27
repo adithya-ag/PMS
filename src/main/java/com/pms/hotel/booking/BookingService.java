@@ -18,6 +18,7 @@ import com.pms.hotel.profile.HotelRepository;
 import com.pms.hotel.room.Room;
 import com.pms.hotel.room.RoomRepository;
 import com.pms.shared.error.BookingConflictException;
+import com.pms.shared.error.IllegalStateTransitionException;
 import com.pms.shared.error.InvalidDateRangeException;
 import com.pms.shared.error.ResourceNotFoundException;
 
@@ -73,6 +74,9 @@ public class BookingService {
         booking.setHotel(hotel);
         booking.setRoom(room);
         booking.setGuest(guest);
+        if(!booking.getStatus().canTransitionTo(BookingStatus.PENDING)){
+            throw new IllegalStateTransitionException(booking.getStatus().toString(), "CONFIRMED");
+        }
         booking.setStatus(BookingStatus.CONFIRMED);
         
         return mapper.toResponse(repo.save(booking));
@@ -92,11 +96,24 @@ public class BookingService {
         ));
     }
 
+    /**
+     * The ONE place a booking's status ever changes. Cancel, check-in and check-out are all
+     * this method with a different target — so the legality rule is asked once, not three times.
+     *
+     * The rule itself lives in BookingStatus, never here. If you ever see an
+     * `if (status == ...)` in this class, the rules have escaped their home.
+     */
     @Transactional
-    public BookingResponse cancelBooking(Long hotelId, Long bookingId){
+    public BookingResponse changeStatus(Long hotelId, Long bookingId, BookingStatus target){
         Booking booking = repo.findByIdAndHotelId(bookingId, hotelId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking"));
-        booking.setStatus(BookingStatus.CANCELLED);
+
+        // ASK before mutating. Checking after would protect nothing — same lesson as the lock.
+        if(!booking.getStatus().canTransitionTo(target)){
+            throw new IllegalStateTransitionException(booking.getStatus().toString(), target.toString());
+        }
+
+        booking.setStatus(target);
         return mapper.toResponse(repo.save(booking));
     }
 }
