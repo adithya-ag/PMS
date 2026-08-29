@@ -30,15 +30,22 @@ CREATE TABLE IF NOT EXISTS user_pms (
 CREATE TABLE IF NOT EXISTS hotels (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name        varchar NOT NULL,
-    email       varchar NOT NULL UNIQUE,
-    phone       varchar NOT NULL UNIQUE,
+    email       varchar NOT NULL,
+    phone       varchar NOT NULL,
     city        varchar NOT NULL,
     state       varchar NOT NULL,
     pincode     varchar NOT NULL,          -- text, not int: identifiers can have leading zeros / '+'
     created_at  timestamptz NOT NULL DEFAULT now(),
     created_by  bigint,
     updated_at  timestamptz,
-    updated_by  bigint
+    updated_by  bigint,
+    -- Named EXPLICITLY, not written inline as `email varchar UNIQUE`.
+    -- Inline UNIQUE lets Postgres auto-name it (hotels_email_key); the live databases were built
+    -- with these names instead, and the mismatch went unnoticed because ddl-auto=validate checks
+    -- columns and types but NEVER constraint names. GlobalExceptionHandler matches on the name to
+    -- turn a violation into a useful 409, so the name is part of the contract - keep it explicit.
+    CONSTRAINT unique_email UNIQUE (email),
+    CONSTRAINT unique_phone UNIQUE (phone)
 );
 
 -- Staff (hotel-scoped)
